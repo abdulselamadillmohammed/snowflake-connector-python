@@ -1,3 +1,5 @@
+# https://chatgpt.com/g/g-p-699363ef0168819189bc732fe5a0afc6-open-source-db/c/6994b7d4-8618-832c-9d96-f06b5338e0e1
+
 #!/usr/bin/env python
 from __future__ import annotations
 
@@ -664,6 +666,7 @@ class SnowflakeConnection:
         self.converter = None
         self.query_context_cache: QueryContextCache | None = None
         self.query_context_cache_size = 5
+
         if connections_file_path is not None:
             # Change config file path and force update cache
             for i, s in enumerate(CONFIG_MANAGER._slices):
@@ -673,6 +676,7 @@ class SnowflakeConnection:
                         skip_file_permissions_check=self._unsafe_skip_file_permissions_check
                     )
                     break
+                
         if connection_name is not None:
             connections = CONFIG_MANAGER["connections"]
             if connection_name not in connections:
@@ -681,9 +685,12 @@ class SnowflakeConnection:
                     f" known ones are {list(connections.keys())}"
                 )
             kwargs = {**connections[connection_name], **kwargs}
+
         elif is_kwargs_empty:
             # connection_name is None and kwargs was empty when called
             kwargs = _get_default_connection_params()
+
+
         self.__set_error_attributes()
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)

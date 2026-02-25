@@ -1,0 +1,10 @@
+[connections.dev]
+user = "abdul"
+password = "devpass"
+account = "dev-account"
+
+[connections.prod]
+user = "abdul"
+password = "prodpass"
+account = "prod-account"
+
