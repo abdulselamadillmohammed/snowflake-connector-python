@@ -203,3 +203,27 @@ if connections_file_path is not None:
 # Usecase 2: CONFIG_MANAGER.read_config from .config_manager relies on 
 # that as well
 
+# Class level logging: easy_logging = ...
+"""
+easy_logging = EasyLoggingConfigPython(
+    skip_config_file_permissions_check=self._unsafe_skip_file_permissions_check
+)
+easy_logging.create_log()
+"""
+
+# The two lines above create an easy logging configuration object 
+# which I believe latches on to the logging instance created above in
+# this file and creates configurations based on it
+
+# The two lines are different types of loggers compared to 
+"""
+logger = getLogger(__name__)
+"""
+
+# ...which is just used for logging general things like 
+
+"""
+logger.debug("connecting...")
+logger.warning("OCSP disabled")
+logger.info("Session closed")
+"""

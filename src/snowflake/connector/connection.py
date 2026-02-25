@@ -609,6 +609,7 @@ class SnowflakeConnection:
             skip_config_file_permissions_check=self._unsafe_skip_file_permissions_check
         )
         easy_logging.create_log()
+        
         self._lock_sequence_counter = Lock()
         self.sequence_counter = 0
         self._errorhandler = Error.default_errorhandler
@@ -676,7 +677,7 @@ class SnowflakeConnection:
                         skip_file_permissions_check=self._unsafe_skip_file_permissions_check
                     )
                     break
-                
+
         if connection_name is not None:
             connections = CONFIG_MANAGER["connections"]
             if connection_name not in connections:
