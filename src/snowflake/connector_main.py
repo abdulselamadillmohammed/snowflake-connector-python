@@ -518,6 +518,41 @@ are handled
 """
 
 #         self._crl_config: CRLConfig | None = None
+"""
+CRL = Certificate Revocation List
+
+What it controls:
+    - Whether revoked certificates are checked 
+    - How CRL caching works
+    - OCSP/CRL validation behavior 
+
+Why it exists: Snowflake enforces strong TLS validation. Enterprises 
+require: revokation checking, proper certificate hygine, compliance 
+guarantees
+
+This object configures that security layer 
+Think of it as: Extra TLS  integrity beyond basic HTTPS
+"""
+
+# NOTE: HttpConfig and CRLConfig are general configurations for 
+# settings up networking layer
+
+#         self._session_manager: SessionManager | None = None
+"""
+Note: the session_manager controls the HttpConfig and SessionManager
+and the .crl file ie crl.py controls CRLConfig
+
+_session_manager manages the session token lifecyle, keep-alive 
+heartbeats, reauthentication, possibilty connection reuse 
+and session expiration handling. 
+
+After login, Snowflake gives you a session token which is 
+at some point going to expire.
+    - It also needs refreshing and must be attached to every
+    request
+
+"""
+
 
 
 # --- QUESTIONS --- 
