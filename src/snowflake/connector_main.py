@@ -599,6 +599,16 @@ Snowflake backend
 
 """
 
+#  setattr(self, f"_{name}", value)
+"""
+All you're doing is iterating through all DEFAULT_CONFIGURATION's 
+items and setting an attribute in default configuration to 
+the value that is present in the default config
+
+    for name, (value, _) in DEFAULT_CONFIGURATION.items():
+        setattr(self, f"_{name}", value)
+
+"""
 
 
 # --- QUESTIONS --- 
