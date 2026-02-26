@@ -610,6 +610,26 @@ the value that is present in the default config
 
 """
 
+#       self.heartbeat_thread = None
+"""
+The purpose of this attribute is to reserve a slot for a background
+thread that will later send periodic heartbeats to Snowflake
+
+You need this because snowflake sessions can expire if idle.
+
+In order to prevent that, the counter may:
+
+    - Start a background tread
+    - Periodically ping the server 
+    - Keep the session alive 
+
+
+
+
+"""
+
+#       is_kwargs_empty = not kwargs
+
 
 # --- QUESTIONS --- 
 """
