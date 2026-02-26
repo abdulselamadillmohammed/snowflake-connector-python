@@ -769,11 +769,12 @@ if "insecure_mode" in kwargs:
     
     warnings.warn(
         warn_message,
-        DeprecationWarning,
+        DeprecationWarning, // This is built in
         stacklevel=2,
     )
 
-    
+    // If for some reason the user doesn't have two neurons to rub
+    // together and they declare contradicting both, help them out
     if (
         "disable_ocsp_checks" in kwargs
         and kwargs["disable_ocsp_checks"] != kwargs["insecure_mode"]
@@ -783,6 +784,8 @@ if "insecure_mode" in kwargs:
             "Using the value of 'disable_ocsp_checks."
         )
    
+    // Force hold your hand to declare the OSCP disable to the same as
+    // the deprecated version.  
     else:
         self._disable_ocsp_checks = kwargs["insecure_mode"]
 """
