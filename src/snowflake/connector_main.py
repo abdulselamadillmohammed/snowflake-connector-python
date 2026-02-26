@@ -477,6 +477,49 @@ Example of what it looks like:
 
 """
 
+# These are request attributes
+"""
+__http_config - Holds low-level HTTP transport settings such as proxy
+configuration, pooling behavior, and network adapter setup used for 
+backend communiction. 
+
+_crl_config - Stores cetificate revocation list (CRL) 
+validation settings that control how TLS certificate revocation 
+is checked during secure connections 
+
+_session_manager - Manages the lifecycle and reuse of HTTP sessions
+(connection pooling, adapters, retries) for all network requests 
+made by the connection
+
+_rest - The Snowflake REST client responsible for sending authenticated 
+API requests (login, queries, heartbeats, session deletion) to the snow-
+flake backend. 
+
+"""
+
+#         self._http_config: HttpConfig | None = None
+
+"""
+Defined as HttpConfig type, this is a set of configuration settings
+which controls how HTTP requests are made
+
+It controls things such as Timeouts, Proxy settings, SSL/TLS 
+verification options, retry behavior, and adapter configuration
+
+Why it exists: 
+- Snowflake communicates over HTTPS. Every REST call needs 
+consistent low-level network settings 
+
+* Basically it acts as a blueprint for how outbound HTTPS traffic 
+behaves
+Without it, you wouldn't know how long to wait, whether to 
+verify certificates, whether to use a proxy, and how retries
+are handled 
+"""
+
+#         self._crl_config: CRLConfig | None = None
+
+
 # --- QUESTIONS --- 
 """
 1. Why do you have multithreading on a single connection instead of 
