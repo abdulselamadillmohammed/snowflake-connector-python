@@ -520,8 +520,10 @@ class SnowflakeConnection:
     Attributes:
         insecure_mode (deprecated): Whether or not the connection is in OCSP disabled mode. It means that the connection
             validates the TLS certificate but doesn't check revocation status with OCSP provider.
+
         disable_ocsp_checks: Whether or not the connection is in OCSP disabled mode. It means that the connection
             validates the TLS certificate but doesn't check revocation status with OCSP provider.
+            
         ocsp_fail_open: Whether or not the connection is in fail open mode. Fail open mode decides if TLS certificates
             continue to be validated. Revoked certificates are blocked. Any other exceptions are disregarded.
         ocsp_root_certs_dict_lock_timeout: Timeout for the OCSP root certs dict lock in seconds. Default value is -1, which means no timeout.

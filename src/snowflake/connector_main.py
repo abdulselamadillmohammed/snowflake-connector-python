@@ -727,7 +727,79 @@ Then connections will report:
 
 """
 
+# Case 2: Streamlit detection
+"""
 
+if "streamlit" in sys.modules:
+    return "streamlit"
+
+If the module streamlit has been imported, you're probably running inside Streamlit.
+"""
+
+# Case 3: Jupyter has been detected 
+"""
+if all(
+    (jpmod in sys.modules)
+    for jpmod in ("ipykernel", "jupyter_core", "jupyter_client")
+):
+    return "jupyter_notebook"
+
+If those modules are loaded, you're in a Jupyter 
+notebook environment. 
+"""
+# Case 4: Snowflake Notebook
+
+# The above only checks if the modules have been imported 
+# and does linear scan 
+
+#Otherwise → leave it unset
+
+
+# insecure_mode checking 
+# ** NOTE ** - This is deprecated
+
+"""
+
+if "insecure_mode" in kwargs:
+    // Since this is deprecated, as in you will be encouraged to perform
+    // the OSCP check, the system will warn the user
+    // From what im seeing they created a new disable_ocsp_checks variable
+
+    warn_message = "The 'insecure_mode' connection property is deprecated. Please use 'disable_ocsp_checks' instead"
+    
+    warnings.warn(
+        warn_message,
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+    
+    if (
+        "disable_ocsp_checks" in kwargs
+        and kwargs["disable_ocsp_checks"] != kwargs["insecure_mode"]
+    ):
+        logger.warning(
+            "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
+            "Using the value of 'disable_ocsp_checks."
+        )
+   
+    else:
+        self._disable_ocsp_checks = kwargs["insecure_mode"]
+"""
+
+"""
+
+Seems like this is primarily a naming convention thing and is not
+related to alteration of function 
+
+    insecure_mode (deprecated): Whether or not the connection is in OCSP disabled mode. It means that the connection
+        validates the TLS certificate but doesn't check revocation status with OCSP provider.
+
+    disable_ocsp_checks: Whether or not the connection is in OCSP disabled mode. It means that the connection
+        validates the TLS certificate but doesn't check revocation status with OCSP provider.
+
+
+"""
 
 
 # --- QUESTIONS --- 
