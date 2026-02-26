@@ -1,4 +1,6 @@
 # https://chatgpt.com/g/g-p-699363ef0168819189bc732fe5a0afc6-open-source-db/c/6994b7d4-8618-832c-9d96-f06b5338e0e1
+# https://github.com/snowflakedb/snowflake-jdbc
+# https://github.com/snowflakedb/snowflake-connector-nodejs
 
 #!/usr/bin/env python
 from __future__ import annotations
@@ -614,11 +616,14 @@ class SnowflakeConnection:
         self.sequence_counter = 0
         self._errorhandler = Error.default_errorhandler
         self._lock_converter = Lock()
+        
         self.messages = []
         self._async_sfqids: dict[str, None] = {}
         self._done_async_sfqids: dict[str, None] = {}
+
         self._client_param_telemetry_enabled = True
         self._server_param_telemetry_enabled = False
+        
         self._session_parameters: dict[str, str | int | bool] = {}
         logger.info(
             "Snowflake Connector for Python Version: %s, "

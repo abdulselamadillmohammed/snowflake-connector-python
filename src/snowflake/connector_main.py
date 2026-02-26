@@ -227,3 +227,235 @@ logger.debug("connecting...")
 logger.warning("OCSP disabled")
 logger.info("Session closed")
 """
+
+# Locking and error handling 
+'''
+self._lock_sequence_counter = Lock()
+self.sequence_counter = 0
+self._errorhandler = Error.default_errorhandler
+self._lock_converter = Lock()
+'''
+
+# Lock sequence counter
+"""
+This is a lock to modify the sequence counter so that
+only 1 thing can modify the counter at once
+"""
+
+# self._lock_sequence_counter - is connected to - self.sequence_counter
+
+"""
+These two go together and the connector maintains 
+a per-connection sequence counter 
+
+- These two fields are used to track the request order that is being 
+sent because they require for their system that the requests are in 
+monotonically increasing sequence ID. 
+This is used for: 
+ - Request tracking 
+ - Retry logic 
+ - Idempotency guarantees eg SET x = 5 and running that command 5 times
+ - Matching responses to requests 
+
+In the connection object they track sequence_counter
+and every time a request is made, something like the
+    def _next_sequence_counter(self) -> int:
+
+is triggered and it causes the incrementation with a lock
+
+The reason for the lock: 
+A snowflake connection onject can be used by multiple threads 
+so both may attempt to send requests simultaneously, without a lock
+the both may send requests at the same time and then set the 
+sequnce id to the same value
+
+Therefore the sequence couunter is a shared mutable state 
+and _lock_sequence_counter protects it 
+
+* This is per-connection because each connection has its own
+independent request stream 
+    
+"""
+
+
+#         self._errorhandler = Error.default_errorhandler
+
+"""
+Imported from .errors which is a custom build tool which allows them to
+specify what error detials you'll be using.
+- Basically acts a switch for later which will follow the required details 
+for your custom error handling needs
+
+    @property
+    def errorhandler(self) -> Callable:  # TODO: callable args
+        return self._errorhandler
+
+    @errorhandler.setter
+    # Note: Callable doesn't implement operator|
+    def errorhandler(self, value: Callable | None) -> None:
+        if value is None:
+            raise ProgrammingError("None errorhandler is specified")
+        self._errorhandler = value
+
+- Notice you have a function which returns the property that you're 
+looking for and hinted as a callable
+
+- Basically, instead of always raising exceptions directly, it can
+transform, collect or delay errors or apply DB-API compliant behaviour
+to them. 
+
+By storing the error handler on the connection instance, they allow: 
+connection.errorhandler = custom_handler
+
+! The key detail with this is that this allows connection specific 
+errors 
+"""
+
+# self._lock_converter = Lock()
+"""
+Basically the conventer relies on shared state, 
+ie it is a single object or class which connection requests 
+rely on, and when you're multithreading, you would be modifying
+state at the same time. Hence why you would need a lock
+
+    "converter_class": (DefaultConverterClass(), SnowflakeConverter),
+
+    from .converter import SnowflakeConverter
+
+
+conn = SnowflakeConnection(...)
+
+Thread A:
+    cursor1.fetchall()
+
+Thread B:
+    cursor2.fetchall()    
+
+"""
+
+# self.messages = []
+
+"""
+This is a simple list which is attached to the connection object.
+It is used for storing non-fata messages returned from snowflake
+which are typically Warnings, Information messages and 
+notices from the servers. 
+
+Notice del self.messages[:] in def close(...)
+
+It follows DB-API conventions and some drivers expose .messages 
+on connections or cursors
+
+* Not for async tracking but just serves as metadata from the backend
+
+
+"""
+
+#         self._async_sfqids: dict[str, None] = {}
+
+"""
+The key for the dictionary are snowflake query ids
+[Snowflake Query ID (UUID string)]
+
+They set it to none likley for future extension to 
+allow the storing of metadata regarding querys 
+
+Example:
+{
+   "01a1234b-....": None,
+   "01c5678d-....": None
+}
+
+- It represents queries that were started by this connection that 
+are currently executing asynchronously
+
+Usecase:
+
+def _cache_query_status(self, sf_qid: str, status_ret: QueryStatus) -> None:
+    if sf_qid in self._async_sfqids and not self.is_still_running(status_ret):
+        self._async_sfqids.pop(sf_qid, None)
+        self._done_async_sfqids[sf_qid] = None
+
+Chain of command:
+_async_sfqids -> Running async queries -> finished -> Moved to _done_async_sfqids
+
+if not self._server_session_keep_alive:
+    if self._all_async_queries_finished():
+        logger.debug(
+            "No async queries seem to be running, deleting session"
+        )
+        self.rest.delete_session(retry=retry)
+    else:
+        logger.debug(
+            "There are {} async queries still running, not deleting session".format(
+                len(self._async_sfqids)
+            )
+
+- Notice you check the length to show that some async queries are running        
+"""
+
+#         self._done_async_sfqids: dict[str, None] = {}
+
+"""
+This stores: 
+    Async queries started by this connection have finished
+
+* It's basically a completion cache. 
+Why store finished ones?
+
+Because:
+    - Multiple may check status and don't want to repeatedly treat a 
+    finished query as active
+    - This avoids race conditions when popping
+
+* You only need to append to on sucessful async query completions
+
+messages stores connection-level server notices.
+
+_async_sfqids tracks currently running async query IDs.
+
+_done_async_sfqids It provides a terminal state record, but is not actively used in this file for safety guarantees.
+
+"""
+
+#These two dicts are the connection-level async lifecycle manager.
+# Ie per connection session
+
+# _client_param_telemetry_enabled
+"""
+- A boolean check of if client telemetry is enabled
+which can be innfluenced by: Connection parameters,
+Environment variables, Config file, Default behavior in the connector
+* Holy moly: Might genuinlt trick you into force enabling telemetry
+! PARAMETER_CLIENT_TELEMETRY_ENABLED
+
+Auth success → session created
+Session created → server sends policy flags
+One of those flags = telemetry allowed or not
+
+Basically client is for the single connection instance
+ie 
+
+conn1 = SnowflakeConnection(client = True)
+conn1 = SnowflakeConnection(client = False)
+
+... HTTP request (auth) -> params{server = True}
+-> 
+conn1 = SnowflakeConnection(server = True)
+
+"""
+
+
+# --- QUESTIONS --- 
+"""
+1. Why do you have multithreading on a single connection instead of 
+creating multiple connection objects then you avoid having to 
+create locks?
+
+2. What does this decorator do?:     @errorhandler.setter
+
+3. What does the type hinting of Callable mean? aren't all functions
+callable?
+
+4. 
+"""
