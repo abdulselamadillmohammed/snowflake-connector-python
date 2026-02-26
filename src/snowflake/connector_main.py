@@ -634,8 +634,100 @@ like:
 
 So this line just initializes the attribute.
 """
-
 #       is_kwargs_empty = not kwargs
+
+"""
+This is just a checker to see if kwargs is empty and is used later on
+it is; i think it is verbose so I added it as a possible patch note 
+
+"""
+
+# application check from the DEFAULT_CONFIGURATION
+"""
+    if "application" not in kwargs:
+        app = self._detect_application()
+        if app:
+            kwargs["application"] = app
+
+The main purpose of this is if the user did not explity pass in 
+application in the kwargs
+- This is an eleborate case where the user for some reason chose to 
+define things except "application" so you have to watch out for this
+
+Hence why you might want to auto detect what environment the code 
+is running in. If something is detected, inject it into kwargs
+
+So it's:
+    - "If the user didn't specify the application name, try to infer it"
+
+* Snowflake tracks a connection attribute called application. 
+This is used for: 
+    - Query history attribution
+    - Monitoring dashboards 
+    - Usage analytics
+    - Support debugging 
+    - Possibly telemetry tagging
+
+"""
+
+# For example, Snowflake can show:
+"""
+Application: streamlit
+Application: jupyter_notebook
+Application: my_custom_app
+
+* This helps identify traffic source
+
+"""
+
+# What is done if the application is in fact not in kwargs
+"""
+
+# This is the static method called  _detect_application()
+
+    @staticmethod
+    def _detect_application() -> None | str:
+        if ENV_VAR_PARTNER in os.environ.keys():
+            return os.environ[ENV_VAR_PARTNER]
+
+        if "streamlit" in sys.modules:
+            return "streamlit"
+
+        if all(
+            (jpmod in sys.modules)
+            for jpmod in ("ipykernel", "jupyter_core", "jupyter_client")
+        ):
+
+            return "jupyter_notebook"
+
+        if "snowbooks" in sys.modules:
+            return "snowflake_notebook"
+
+Case 1. It is defined as an environment variable
+
+if ENV_VAR_PARTNER in os.environ.keys():
+    return os.environ[ENV_VAR_PARTNER]
+
+This is implemented in .constants so im assuming it performs an 
+internal fetch
+* This allows for snowflake partners, embedded integrations
+and SaaS wrappers to brand their applcaiton
+
+Example: 
+export SNOWFLAKE_PARTNER="my_enterprise_tool"
+* Assuming the SaaS runs as a wrapper over snowflake, 
+then the SaaS will explort the VAR
+
+export SF_PARTNER="my_enterprise_tool"
+
+// cause in .constants: ENV_VAR_PARTNER = "SF_PARTNER"
+
+Then connections will report:
+    application = my_enterprise_tool
+
+"""
+
+
 
 
 # --- QUESTIONS --- 
