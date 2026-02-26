@@ -550,6 +550,52 @@ After login, Snowflake gives you a session token which is
 at some point going to expire.
     - It also needs refreshing and must be attached to every
     request
+"""
+
+#         self._rest: SnowflakeRestful | None = None
+
+"""
+.network implements the restful client. This client implementation
+is what is responsible for talking directly with snowflake. 
+
+It: 
+    - Sends HTTPS requests 
+    - Attaches auth tokens
+    - Serializes JSON payloads
+    - Handles retry logic
+    - Processes server responses 
+    - Detects reauthentication triggers 
+
+For example: 
+    cursor.execute("SELECT 1")
+
+Eventually it flows into _rest.
+* Think of it as:
+    - The engine that actually communicates with Snowflake's backend.    
+"""
+
+"""
+
+SnowflakeConnection
+    ↓
+_http_config → defines HTTP behavior
+_crl_config → defines TLS validation rules
+_session_manager → manages auth/session state
+_rest → sends actual REST API calls
+
+---
+
+Application
+   ↓
+SnowflakeConnection
+   ↓
+SessionManager
+   ↓
+SnowflakeRestful
+   ↓
+HTTPS
+   ↓
+Snowflake backend
 
 """
 
