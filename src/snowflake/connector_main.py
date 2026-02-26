@@ -445,6 +445,37 @@ conn1 = SnowflakeConnection(server = True)
 
 """
 
+# _session_parameters
+"""
+self._session_parameters: dict[str, str | int | bool] = {}
+
+What this is:
+    This is a dictionary that stores session-level parameters 
+    returned by the Snowflake server.
+
+Params like ={AUTOCOMMIT, TIMEZONE, CLIENT_SESSION_KEEP_ALIVE
+,QUERY_CONTEXT_CACHE_SIZE, etc.}
+*  _session_parameters is the in-memory representation of the current session state.
+"""
+
+
+#  logger.info(...)
+
+"""
+logger = getLogger(__name__)
+
+    logger.info(
+        "Snowflake Connector for Python Version: %s, "
+        "Python Version: %s, Platform: %s",
+        SNOWFLAKE_CONNECTOR_VERSION,
+        PYTHON_VERSION,
+        PLATFORM,
+    )
+
+Example of what it looks like:
+    Snowflake Connector for Python Version: 3.7.2, Python Version: 3.11.5, Platform: Darwin-23.3.0-x86_64
+
+"""
 
 # --- QUESTIONS --- 
 """
