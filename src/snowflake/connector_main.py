@@ -623,9 +623,16 @@ In order to prevent that, the counter may:
     - Periodically ping the server 
     - Keep the session alive 
 
+It is currently none because the connection has not been 
+established and has not started yet. 
 
+Later, if CLIENT_SESSION_KEEP_ALIVE is enabled, they'll do something
+like: 
 
+    self.heartbeat_thread = HeartBeatTimer(...)
+    self.heartbeat_thread.start()
 
+So this line just initializes the attribute.
 """
 
 #       is_kwargs_empty = not kwargs
