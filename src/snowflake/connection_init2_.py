@@ -105,7 +105,64 @@ and prioritize development.
 
 
 """
-
 #        self._log_nanoarrow_import()
 
+"""
+This is likely a simple check, since Nanoarrow is a compiled 
+C-extension that is used for fast Arrow data conversion. 
+This function likely checks:
+"nanoarrow_arrow_iterator" in sys.modules or something similar
+
+If nanoarrow loaded sucessfully:
+    - Log that optimized Arrow path is being used
+If not:
+    - Log fallback behavior. 
+
+Why? 
+    - Performance diagnostics.
+
+They want to know:
+    - Is the fast path being used? Is the compiled module missing?
+    Are users running pure Python fallback?   
+"""
+
 #        self._log_minicore_import()
+"""
+This is the same idea as a nanocore check, minicore is another 
+optional compiled component used internally (for performance-critical 
+logic). 
+
+This logs whether it was sucessfully imported for Observability, 
+Deployment diagnostics and Feature adoption tracking 
+
+"""
+
+#        atexit.register(self._close_at_exit)
+"""
+
+    def _close_at_exit(self):
+        with suppress(Exception):
+            self.close(retry=False)
+
+The atexit is a Python standard library module.
+When you call it, it ensures that when the interpreter 
+exits normally call the function passed in
+
+
+    def _close_at_exit(self):
+        with suppress(Exception):
+            self.close(retry=False)
+
+What _close_at_exit probably does:
+Closes open sessions
+Flushes telemetry
+Cleans up REST resources
+Stops heartbeats
+Prevents dangling threads
+
+This prevents:
+Zombie sessions
+Token leaks
+Server-side abandoned connections
+
+"""
