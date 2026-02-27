@@ -805,6 +805,43 @@ related to alteration of function
 """
 
 
+#         self.converter = None
+"""
+Don't you already have a default attribute called converter_class?
+
+This is what will later hold the SnowflakeConverter instance. 
+The converter is responsible for:
+    - Converting Snowflake datatypes into python native types
+
+Just declaring but not yet initializing:
+     self.converter = None
+
+    
+| Snowflake Type | Python Type   |
+| -------------- | ------------- |
+| NUMBER         | int / Decimal |
+| FLOAT          | float         |
+| TIMESTAMP      | datetime      |
+| DATE           | datetime.date |
+| VARIANT        | dict / JSON   |
+| BINARY         | bytes         |
+
+When you do:
+    cursor.execute("SELECT 1")
+    cursor.fetchall()
+
+
+     
+"""
+
+
+#        self.query_context_cache: QueryContextCache | None = None
+
+
+#        self.query_context_cache_size = 5
+
+
+
 # --- QUESTIONS --- 
 """
 1. Why do you have multithreading on a single connection instead of 
