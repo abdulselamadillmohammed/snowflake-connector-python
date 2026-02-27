@@ -85,3 +85,27 @@ Create telemetry (needs REST session)
 ->
 Mark connection as active
 """
+
+# The telemetry abuse :) :
+
+#        self._log_telemetry_imported_packages()
+
+"""
+This basically inspects sys.modules which is a dictionary that 
+contains all currently imported python modules. 
+It likely checks whether certain optional packages are present, 
+logs that information via telemetry and sends that to Snowflake
+for analytics. 
+
+Why?: Because Snowflake wants to know if users are importing 
+pandas, pyarrow, or sqlalchemy or Other ecosystem integrations
+
+It helps them: measure feature usage, detect compatibility issues
+and prioritize development. 
+
+
+"""
+
+#        self._log_nanoarrow_import()
+
+#        self._log_minicore_import()
