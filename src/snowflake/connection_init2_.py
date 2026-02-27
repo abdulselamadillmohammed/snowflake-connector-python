@@ -58,8 +58,30 @@ Important ordering detail:
       because it depends on _rest. If connection fails, 
       telemetry is never created.
 
-
-
 """
 
 #        self.expired = False
+"""
+This is a simple state flag. It tracks whether the session has 
+expired. Later in the lifecycle:
+    - If tokens expire
+    - If reauthentication is needed
+    - If server signals expirtion 
+
+This flag can be flipped. 
+    
+Post intialization, this is set to false since at the nanosecond level
+the session will not be experired. 
+
+"""
+
+# Order of operations
+"""
+Attach error types
+->
+Establish connection + authentication
+->
+Create telemetry (needs REST session)
+->
+Mark connection as active
+"""
