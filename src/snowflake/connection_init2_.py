@@ -242,3 +242,33 @@ Config flags, retry policies, Logging and Telemetry
 * They are helpers bound to the connection state. 
 
 """
+
+# What @ property does
+"""
+@property turns a method into a read-only attribute.
+
+Instead of calling:
+conn.insecure_mode()
+
+you can do:
+conn.insecure_mode
+
+Why not just do:
+
+self.disable_ocsp_checks
+
+Because:
+The internal variable is named _disable_ocsp_checks
+The leading underscore means "internal implementation detail"
+
+They may want to:
+
+1. Validate later
+2. Add logging
+3. Change behavior
+4. Deprecate names cleanly
+
+Properties allow them to expose a stable public interface while 
+keeping internal flexibility.
+"""
+
