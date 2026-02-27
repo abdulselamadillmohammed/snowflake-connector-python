@@ -41,7 +41,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
-from . import errors
+from . import errors # full file import
 from ._query_context_cache import QueryContextCache
 from ._utils import (
     _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
@@ -687,7 +687,7 @@ class SnowflakeConnection:
 
         if connection_name is not None:
             connections = CONFIG_MANAGER["connections"]
-            
+
             if connection_name not in connections:
                 raise Error(
                     f"Invalid connection_name '{connection_name}',"
