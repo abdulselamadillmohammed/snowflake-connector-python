@@ -830,16 +830,179 @@ When you do:
     cursor.execute("SELECT 1")
     cursor.fetchall()
 
+* What is recieved from the cursor is a raw JSON which is retrieved 
+from the REST API which must be converted into Python objects.
 
+That's what the converter handles. 
+Why initialize as None? 
+
+Because:
+    - The converter depends on session parameters (timezone, numeric handling, etc.)
+    - It gets initialized after connection is established 
+
+So they reserve the slot early. 
      
 """
-
-
 #        self.query_context_cache: QueryContextCache | None = None
+
+"""
+self.query_context_cache: QueryContextCache = None
+
+* You type hint here maybe because it is an object 
+
+- Snowflake supports a feature called Query Context Cache. 
+* It likely stores metadata about previously executed queries 
+possibly table metadata, query planning context and result-set
+related state as well as Server-provided optimization hints 
+
+The cache likely reduces round trips, repeated metadata fetches 
+and repeated context reconstruction
+
+In high-throughput systems, this improves performance
+"""
 
 
 #        self.query_context_cache_size = 5
 
+"""
+This sets the maximum number of cached query contexts. 
+* This means that it keeps upto 5 recent query contexts and
+evicts older ones
+* It's a small LRU-style cache size. 
+
+Why 5? 
+    - The reason being to keep it small enough that it doesn't 
+    abuse memeory but large enough to benefit interactive sessions 
+
+"""
+
+# -- LifeCycle -- 
+# Query execution → response parsing → type conversion → caching context
+
+"""
+Application
+  ↓
+SnowflakeConnection
+  ↓
+SnowflakeRestful (network)
+  ↓
+Server JSON response
+  ↓
+SnowflakeConverter (type conversion)
+  ↓
+QueryContextCache (optimization)
+  ↓
+User receives Python objects
+"""
+
+# -- if connections_file_path is not None:
+
+"""
+if connections_file_path is not None:
+
+    # Change config file path and force update cache
+
+    for i, s in enumerate(CONFIG_MANAGER._slices):
+    
+        if s.section == "connections":
+        
+            CONFIG_MANAGER._slices[i] = s._replace(path=connections_file_path)
+
+            CONFIG_MANAGER.read_config(skip_file_permissions_check=self._unsafe_skip_file_permissions_check)
+
+            break
+            
+
+Understanding the code block:
+
+By default; CONFIG_MANAGER reads :
+    ~/.snowflake/config.toml
+    ~/.snowflake/connections.toml   ← this is a “slice”
+
+The parser inside CONFIG_MANAGER:
+    ConfigSlice(CONNECTIONS_FILE, ..., "connections")
+
+- All this is doing is if the user passes in a configuration file, 
+replace the default parameters with the ones which the user would 
+prefer.
+
+- If the user explicitly passed a custom connections_file_path,
+replace the default slice path with that new file and reload config.
+
+"""
+
+"""
+Iterating one by one:
+
+class ConfigSlice(NamedTuple):
+    path: Path
+    options: ConfigSliceOptions
+    section: str
+
+Each s is a ConfigSlice(path, options, section).
+    
+[
+  {
+    "path": "/Users/abdul/.snowflake/connections.toml",
+    "options": {
+      "check_permissions": true,
+      "only_in_slice": false
+    },
+    "section": "connections"
+  }
+]
+
+1. for i, s in enumerate(CONFIG_MANAGER._slices):
+    - Each s is a ConfigSlice(path, options, section)
+
+** You basically replace the old path into the connection path you've
+now specificed since each attribute gets tied by path of ConfigSlice
+
+"""
+
+# Block2: if connection_name is not None:
+
+"""
+if connection_name is not None:
+    connections = CONFIG_MANAGER["connections"]
+    
+    if connection_name not in connections:
+        raise Error(
+            f"Invalid connection_name '{connection_name}',"
+            f" known ones are {list(connections.keys())}"
+        )
+    kwargs = {**connections[connection_name], **kwargs}
+
+
+[connections.myprod]
+account = "abc"
+user = "abdul"
+warehouse = "wh1"
+
+[connections.dev]
+account = "xyz"
+user = "abdul_dev"
+warehouse = "wh_dev"
+
+
+--> Becomes:
+{
+    "myprod": { "account": "...", "user": "...", ... },
+    "dev": { ... }
+}
+
+* Raise error if there is a mismatch
+
+Kwargs merging:
+    kwargs = {**connections[connection_name], **kwargs}
+
+    You start with dictionary unpacking where you take the 
+    params which are in the file then you continue with the ones
+    which are most closely defined, therefore allow even faster 
+    override
+    
+
+"""
 
 
 # --- QUESTIONS --- 
