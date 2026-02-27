@@ -166,3 +166,79 @@ Token leaks
 Server-side abandoned connections
 
 """
+
+
+# -- File operations --
+
+"""
+The problem they are solving: Snowflake supports 
+
+PUT file://local.csv @mystage
+GET @mystage/file.csv file://.
+
+Those are not normal SQL queries.
+They trigger:
+    - Uploads to S3 / Azure / GCS
+    - Parallel downloads
+    - Compression
+    - Encryption
+    - Chunking 
+    - Retry logic  
+
+* These operations require extra client-side logic 
+"""
+# self._file_operation_parser = FileOperationParser(self)
+"""
+This is a parser which takes in the self and parses SQL statements
+to detect file operations
+
+cursor.execute("PUT file://data.csv @stage")
+
+The parser: 
+    - Detects it is a PUT commands
+    - Extracts
+        - Local file path
+        - Target stage
+        - Compression flags
+        - Parallelism settings 
+    - Converts SQL text -> structured file operation instruction
+
+It likely answers:
+    - Is this a PUT?
+    - Is this a GET?
+    - What options are present?
+
+- Without this parser, the connector would treat PUT/GET like normal
+SQL
+"""
+
+# self._stream_downloader = StreamDownloader(self)
+
+"""
+This is used for downloading result sets and staged files
+
+Ie when downloading larg efiles or result sets, it 
+streams HTTP chunks, handles decompression,
+handles chunk reassembly and supports parallel 
+downloads and writes to disk or buffers
+
+Instead of : requests.get(...).content
+
+which would load everything into memory:
+it instead reafs reponse iteratively and handles
+retries. It alos handles network interruptions and verifies
+checksums. 
+
+"""
+
+# Why are they attached to the connection?
+
+"""
+They are static functions which use the self which gives access to 
+self._rest (authenticated session)
+and also allows them to have access to Credentials
+Config flags, retry policies, Logging and Telemetry
+
+* They are helpers bound to the connection state. 
+
+"""

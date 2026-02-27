@@ -709,6 +709,7 @@ class SnowflakeConnection:
         self._log_telemetry_imported_packages()
         self._log_nanoarrow_import()
         self._log_minicore_import()
+        
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         atexit.register(self._close_at_exit)
 
