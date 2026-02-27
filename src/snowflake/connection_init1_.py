@@ -1000,8 +1000,10 @@ Kwargs merging:
     params which are in the file then you continue with the ones
     which are most closely defined, therefore allow even faster 
     override
-    
 
+    
+connections = CONFIG_MANAGER["connections"] returns the "connections" 
+section that was just loaded from starter.toml (because of step 3).
 """
 
 
