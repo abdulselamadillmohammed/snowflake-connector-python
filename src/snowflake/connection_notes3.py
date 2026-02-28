@@ -488,6 +488,303 @@ Why this matters:
 | socket_timeout            | Low-level TCP timeout               |
 | _backoff_generator        | Retry delay strategy                |
 | client_session_keep_alive | Whether to send periodic heartbeats |
-    
+
+Note:Snowflake sessions expire automatically after inactivity.
+     Keep-alive prevents re-authentication overhead.
+
+The setter for the client session keep alive. 
+
+@client_session_keep_alive.setter
+def client_session_keep_alive(self, value) -> None:
+    self._client_session_keep_alive = value
 """
 
+#     def client_session_keep_alive_heartbeat_frequency(self) -> int | None:
+"""
+* Assuming you send heartbeats if keep alive is set
+
+@property
+def client_session_keep_alive_heartbeat_frequency(self) -> int | None:
+    return self._client_session_keep_alive_heartbeat_frequency
+
+@client_session_keep_alive_heartbeat_frequency.setter
+def client_session_keep_alive_heartbeat_frequency(self, value) -> None:
+    self._client_session_keep_alive_heartbeat_frequency = value
+    self._validate_client_session_keep_alive_heartbeat_frequency()
+
+* The purpose of this is to control how often in seconds heartbeats
+are sent. 
+
+heartbeat_frequency = 3600 // sends a heartbeat every hour
+
+Setter calls validation:
+    self._validate_client_session_keep_alive_heartbeat_frequency()
+This ensures that frequency is within allowed bounds in that 
+it is not too small or not too large 
+
+So this parameter directly affects:
+    Session longevity
+    Background network traffic
+    Resource usage
+"""
+
+#     def platform_detection_timeout_seconds(self) -> float | None:
+"""
+@property
+def platform_detection_timeout_seconds(self) -> float | None:
+    return self._platform_detection_timeout_seconds
+
+@platform_detection_timeout_seconds.setter
+def platform_detection_timeout_seconds(self, value) -> None:
+    self._platform_detection_timeout_seconds = value
+
+Purpose:
+    - This controls timeoutused during platform detection
+
+Platform detection happens during connection initialization to determine:
+    OS
+    Python runtime
+    Possibly CPU architecture
+    Environment metadata
+
+This affects telemetry and compatibility logic.
+
+If detection hangs:
+    This timeout prevents blocking connection forever.
+
+Not query-related — startup-related.
+"""
+
+#     def client_prefetch_threads(self) -> int:
+
+"""
+@property
+def client_prefetch_threads(self) -> int:
+    return (
+        self._client_prefetch_threads
+        if self._client_prefetch_threads
+        else DEFAULT_CLIENT_PREFETCH_THREADS
+    )
+
+@client_prefetch_threads.setter
+def client_prefetch_threads(self, value) -> None:
+    self._client_prefetch_threads = value
+    self._validate_client_prefetch_threads()
+
+This controls how many background threads are used to prefetch 
+result chunks. 
+
+Snowflake result sets are often:
+    - Chunked 
+    - Downloaded in parallel
+    - Streamed back asynchronously 
+Prefetch threads:
+    - Download future result chunks while current chunk is being
+processed. 
+    - Improve large result performance
+
+* If not set -> defaults to DEFAULT_CLIENT_PREFETCH_THREADS
+
+Setter validates:
+    Thread count reasonable.
+    Not too large.
+
+Impacts:
+    Performance
+    Memory usage
+    Concurrency
+
+"""
+
+#     def client_fetch_threads(self) -> int | None:
+
+"""
+@property
+def client_fetch_threads(self) -> int | None:
+    return self._client_fetch_threads
+
+@client_fetch_threads.setter
+def client_fetch_threads(self, value: None | int) -> None:
+    if value is not None:
+        value = min(max(1, value), MAX_CLIENT_FETCH_THREADS)
+    self._client_fetch_threads = value
+
+The purpose of this is to controls how many threads are used for 
+fetching data chunks from sever. 
+The difference from prefetch being that prefetch is used to 
+proactively download chunks and fetch threads being used for 
+parallel data retrieval workers
+
+Setter clamps value:
+    value = min(max(1, value), MAX_CLIENT_FETCH_THREADS)
+
+this prevents have 0 threads or unboundede thread explosions; 
+throughput CPU usage and network concurrency. 
+"""
+
+#     def client_fetch_use_mp(self) -> bool:
+"""
+@property
+def client_fetch_use_mp(self) -> bool:
+    return self._client_fetch_use_mp
+
+The purpose of this is to control whether the connector uses 
+multiprocessing (separate processes) instead of threads for parts
+of result fetching 
+
+Why it exists:
+    - Threads in Python share the GIL, so CPU heavy work does not
+    parallelize well
+    - Separate processes can parallelize CPU-bound parts at the 
+    cost of overhead
+* Snowflake uses this flag to choose between a thread based
+fetch pipeline and a process-based fetch pipeline
+
+"""
+
+#     def rest(self) -> SnowflakeRestful | None:
+"""
+This exposes the underlying REST client object that actually talks
+to Snowflake. 
+
+Snowflake uses self._rest for:
+    - login/authentication calls
+    - query execution (/queries/v1/query-request)
+    - status poling (/monitoring/queries/...)
+    - session deletion/heartbeat
+    - telemetry uploads 
+    - file transfer requests 
+
+If the connection is closed, _rest becomes None, which is why return
+type is | None. 
+"""
+
+# application
+"""
+@property
+def application(self) -> str:
+    return self._application
+
+this identifies the "application name" the connector reports to Snowflake 
+- The purpose of which is to use it for:
+    - server-side logging/metadata about client type
+    - telemetry segmentation (who is using what)
+    - feature gating/compat logic in some cases
+* This value is sent during authentication / session establishment.
+
+"""
+
+#     def errorhandler(self) -> Callable:  # TODO: callable args
+"""
+@property
+def errorhandler(self) -> Callable:  # TODO: callable args
+    return self._errorhandler
+
+The purpose of this is to return a function that handles errors
+that are raised by the connector which comes from .errors
+
+Snowflake uses an "error handler" pattern so that when something
+fails, it can:  
+    - raise exceptions (default behavior)
+    - or allow custom behavior (log, convert, suppress, etc) if a 
+    user overrides it 
+
+It returns the current handler function stored in _errorhandler
+"""
+
+#     @errorhandler.setter
+"""
+@errorhandler.setter
+# Note: Callable doesn't implement operator|
+def errorhandler(self, value: Callable | None) -> None:
+    if value is None:
+        raise ProgrammingError("None errorhandler is specified")
+    self._errorhandler = value
+
+This allows setting a custom error handler but blocks 
+setting it to None.
+
+    So this is valid:
+        conn.errorhandler = some_function
+    But this is rejected:
+        conn.errorhandler = None
+
+because the connector assumes there is always a callable error 
+handler available.
+
+Snowflake uses this to guarantee error handling never becomes 
+“missing,” which would break error reporting paths.
+"""
+
+#     def converter_class(self) -> type[SnowflakeConverter]:
+"""
+@property
+def converter_class(self) -> type[SnowflakeConverter]:
+    return self._converter_class
+
+The purpose of this is to expose the converter implementation that
+the conneciton is using. 
+    - Snowflake uses the convereter to turn server result types
+    into Python values, e.g.:
+        * timestamps → datetime
+        * numeric → int/float/Decimal
+        * variants → dict/list
+        * arrow chunks → row values
+"""
+
+#     def validate_default_parameters(self) -> bool:
+"""
+@property
+def validate_default_parameters(self) -> bool:
+    return self._validate_default_parameters
+
+This controls whether the connector performs validation/warnings for 
+connection parameters.
+    - In your file, when this is true, __config() will:
+        * warn about unknown parameter names 
+        * warn about wrong parameter types
+        * possibly enforce stricter checks before connecting
+
+- So snowflake uses it to toggle "strictness" during connection 
+config parsing. 
+
+"""
+
+#     def is_pyformat(self) -> bool:
+"""
+@property
+def is_pyformat(self) -> bool:
+    return self._paramstyle in ("pyformat", "format")
+
+This determines whetehr the connector should should client-side
+parameter interpolation style: (pyformat/format) vs others 
+(qmark, numeric).
+
+Snowflake uses this to decide which binding pipeline to run:
+
+If is_pyformat is True → _process_params_pyformat(...)
+Else → likely _process_params_qmarks(...) or numeric binding
+
+So this property directly controls how query parameters are 
+encoded and sent.
+
+"""
+
+#     def consent_cache_id_token(self):
+"""
+@property
+def consent_cache_id_token(self):
+    return self._consent_cache_id_token
+
+This controlls whether the connector is allowed to cache an ID
+token (SSO/external browser flows).
+
+Snowflake uses this to decide if it should store temporary 
+credentials (token caching) so future logins:
+    avoid re-prompting browser auth
+    reduce friction
+    reuse cached identity proof
+
+It's a policy/consent knob, especially relevant to SSO flows.
+
+"""
