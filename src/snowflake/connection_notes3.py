@@ -331,3 +331,163 @@ Without a warehouse:
 * This is critical for actual query execution
 """
 
+# role
+"""
+@property
+def role(self) -> str | None:
+    return self._role
+
+It controls the security role used for permissions. It is the 
+equivalent to USE ROLE analyst;
+
+It determines what objects you can access; what priviledges you
+have and what schemas/tables are visible. 
+
+Even if authenticated sucessfully, wrong role -> access denied 
+errors. 
+
+
+During authentication:
+
+    Connector sends login request.
+    Server establishes session.
+    Server applies:
+        database
+        schema
+        warehouse
+        role
+
+These become session-level parameters.
+They influence:
+    Query resolution
+    Authorization
+    Execution routing
+    Billing
+"""
+
+# login_timeout
+"""
+@property
+def login_timeout(self) -> int | None:
+    return int(self._login_timeout) if self._login_timeout is not None else None
+
+* Purpose:
+    Controls how long (in seconds) the connector waits during authentication. 
+
+Covers:
+    Initial REST login request
+    Token exchange
+    MFA / OAuth flows
+    OCSP checks during login
+
+If login exceeds this duration → authentication fails.
+Why cast to int?
+    Config values may come from:
+    Environment variables (strings)
+    TOML files (strings)
+    kwargs (mixed types)
+This guarantees a numeric value before passing to HTTP layer.
+"""
+
+# network_timeout
+"""
+@property
+def network_timeout(self) -> int | None:
+    return int(self._network_timeout) if self._network_timeout is not None else None
+
+Purpose:
+    Controls timeout for regular network operations after login
+
+Applies to:
+    Query execution requests
+    Result fetch requests
+    Metadata calls
+    File transfers
+
+* If a request takes longer than this → request fails.
+* This is a higher-level request timeout.
+"""
+
+# socket_timeout
+"""
+@property
+def socket_timeout(self) -> int | None:
+    return int(self._socket_timeout) if self._socket_timeout is not None else None
+
+Purpose:
+    This controls low-level socket I/O timeout. 
+
+More granular than network timeout. 
+Applies to:
+    - TCP read/write operations
+    - Underlying HTTP client socket behavior
+
+| Timeout Type    | Level                     |
+| --------------- | ------------------------- |
+| login_timeout   | Authentication phase      |
+| network_timeout | Full request lifecycle    |
+| socket_timeout  | Raw TCP socket operations |
+
+Socket timeout is typically used by urllib3 or 
+requests under the hood.
+"""
+
+#     def _backoff_generator(self) -> Iterator:
+"""
+@property
+def _backoff_generator(self) -> Iterator:
+    return self._backoff_policy()
+
+Purpose:
+    Returns an iterator that produces retry delays. 
+
+for delay in conn._backoff_generator:
+    try request
+    if fails:
+        sleep(delay)
+
+_backoff_policy() likely implements:
+    - Exponential backoff
+    - Jitter
+    - Max retry cap
+
+It is used when:
+    - Network request fails
+    - Transient errors occur
+    - Retrying login
+    - Retrying queries
+    - Retrying file transfers
+
+* This is how Snowflake avoids hammering servers on failure.
+"""
+
+#     def client_session_keep_alive(self) -> bool | None:
+"""
+@property
+def client_session_keep_alive(self) -> bool | None:
+    return self._client_session_keep_alive
+
+Purpose:
+    Controls whether the connector sends heartbeat messages to 
+    keep session alive.
+
+* If True:
+    - Background thread periodically pings sever.
+    - Prevents session expiration due to inactviity.
+* If False:
+    - Session may expire after idle timeout. 
+
+Why this matters:
+    - Snowflake sessions expire automatically after inactivity 
+    - Keep alive prevents re-authentocation overhead
+
+| Property                  | What It Controls                    |
+| ------------------------- | ----------------------------------- |
+| login_timeout             | How long to wait for authentication |
+| network_timeout           | How long to wait for API requests   |
+| socket_timeout            | Low-level TCP timeout               |
+| _backoff_generator        | Retry delay strategy                |
+| client_session_keep_alive | Whether to send periodic heartbeats |
+    
+"""
+
