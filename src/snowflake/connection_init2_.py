@@ -272,3 +272,386 @@ Properties allow them to expose a stable public interface while
 keeping internal flexibility.
 """
 
+#  NOTE: "ocsp_fail_open": (True, bool),  # fail open on ocsp issues, default true
+
+#    def _ocsp_mode(self) -> OCSPMode:
+
+"""
+def _ocsp_mode(self) -> OCSPMode:
+
+    'OCSP mode. DISABLE_OCSP_CHECKS, FAIL_OPEN or FAIL_CLOSED'
+
+    if self.disable_ocsp_checks:
+        return OCSPMode.DISABLE_OCSP_CHECKS
+
+    elif self.ocsp_fail_open:
+        return OCSPMode.FAIL_OPEN
+
+    else:
+        return OCSPMode.FAIL_CLOSED
+
+
+* This decides that the OSCPMode is (although they don't seem to be 
+using it); at least anywhere in this file
+
+What it does: 
+    - It converts two booleans into a single enum that represents the 
+    effective OSCP policy. 
+
+Inputs:
+    - disable_oscp_checks
+    - oscp_fail_open
+
+
+OCSPMode is an object which is defined as a constant 
+
+The output of this is to return the modified object 
+
+What the three modes classify:
+    1. DISABLE_OCSP_CHECKS
+    - Do not check certificate revocation at all. 
+    - Although this is tecnically fast, it is the least secure. 
+
+    2. FAIL_OPEN
+    Check revocation via OCSP.
+    If OCSP server fails or is unreachable → allow connection anyway.
+
+    3. FAIL_CLOSED
+    Check revocation.
+    If OCSP check fails → block connection.
+
+    Strictest; most secure 
+"""
+
+#    def cert_revocation_check_mode(self) -> str | None:
+
+"""
+@property
+def cert_revocation_check_mode(self) -> str | None:
+    if not self._crl_config:
+        return self._cert_revocation_check_mode
+    return self._crl_config.cert_revocation_check_mode.value
+
+This is a setter for determining the check mode for the revocation
+list. This is related to CRL
+
+* Unlike OCSP which is a real time check, CRL uses downlaoded revocation
+lists. 
+
+
+* It determines the effective CRL mode. 
+
+There are two possibilites. 
+
+Case 1: _crl_config is None
+Use legacy internal value:
+    self._cert_revocation_check_mode
+
+Case 2: _crl_config exists
+
+In this case, use a structured CRL configuration object:
+    self._crl_config.cert_revocation_check_mode.value
+
+* This version supports richer CRL configuration via _crl_config
+
+
+Possible values
+    Docstring says:
+        "DISABLED"
+        "ENABLED"
+        "ADVISORY"
+
+    Meaning:
+        DISABLED → no CRL checking
+        ENABLED → strict CRL validation
+        ADVISORY → check but don't fail hard
+"""
+
+#    def allow_certificates_without_crl_url(self) -> bool | None:
+
+"""
+
+* This is just a wrapper to support both legacy and newer versions
+
+@property
+def allow_certificates_without_crl_url(self) -> bool | None:
+    if not self._crl_config:
+        return self._allow_certificates_without_crl_url
+    return self._crl_config.allow_certificates_without_crl_url
+
+What this controls:
+    Some certificates contain a CRL distribution URL. 
+    Some do not. 
+    This setting answers:
+        If a certificate has no CRL URL, should we reject it
+
+If True:
+    Allow certificate even if no CRL URL exists.
+
+If False:
+
+    Reject certificate if CRL URL missing.
+    Same design pattern as previous property
+
+    If structured CRL config exists → use it.
+        Else → fall back to legacy attribute.
+
+"""
+
+#     def crl_connection_timeout_ms(self) -> int | None:
+"""
+@property
+def crl_connection_timeout_ms(self) -> int | None:
+    "Connection timeout for CRL downloads in milliseconds."
+    if not self._crl_config:
+        return self._crl_connection_timeout_ms
+    return self._crl_config.connection_timeout_ms
+
+This controls how long to wait when establishing the TCP connection
+to downlaod a CLR life. 
+
+This is: DNS lookup, TCP handshake and TLS handskake to CRL host
+which is measured in milliseconds. 
+
+* Note: if for example, _crl_connection_timeout_ms is set to 3000, 
+the connector waits 3 seconds to connect to the CRL server before 
+failing
+"""
+
+#     def crl_read_timeout_ms(self) -> int | None:
+"""
+@property
+def crl_read_timeout_ms(self) -> int | None:
+    "Read timeout for CRL downloads in milliseconds."
+    if not self._crl_config:
+        return self._crl_read_timeout_ms
+    return self._crl_config.read_timeout_ms
+
+* basically same thing as before but now they choose to allow
+a newer version with a better struct, ie now reach within
+_crl_config which is set in I believe .connect()
+
+This controls how long to wait while reading data after 
+connection is established. 
+
+Difference from connection timeout:
+
+Type	            Covers
+Connection timeout	Time to establish connection
+Read timeout	    Time to receive response data
+
+Example:    
+    * Connection succeeds in 100ms 
+    * Server stalls during download 
+    * Read timeout determines how long to wait before aborting 
+
+"""
+#     def crl_cache_validity_hours(self) -> float | None:
+
+"""
+@property
+def crl_cache_validity_hours(self) -> float | None:
+    "CRL cache validity time in hours."
+    if not self._crl_config:
+        return self._crl_cache_validity_hours
+    // Doesn't python run into division issues if seconds is too large?
+    return self._crl_config.cache_validity_time.total_seconds() / 3600
+
+This controls how long a downloaded CRL is considered valid in 
+cache. 
+Instead of downloading the CRL every time:
+    - Download once 
+    - Cache locally
+    - reuse for X hours
+
+If set to 24, CRL is valid for 24 hours before re-fetching
+"""
+
+# Why this pattern exists 
+"""
+if not self._crl_config:
+    return legacy_value
+else:
+    return structured_config_value
+
+This means:
+    Older versions stored individual attributes
+    Newer versions use _crl_config object
+    They're maintaining backward compatibility
+
+----------------------------------------------------
+
+CRL flow works like this:
+    - Server certificate contains CRL distribution URL
+    - Connector downloads CRL file
+    - Checks if certificate serial is revoked
+    - Uses cache to avoid repeated downloads
+
+These properties tune:
+    - How long to wait for CRL servers
+    - How long to trust cached CRLs
+
+"""
+
+#     def enable_crl_cache(self) -> bool | None:
+"""
+@property
+def enable_crl_cache(self) -> bool | None:
+    "Whether CRL caching is enabled."
+    if not self._crl_config:
+        return self._enable_crl_cache
+    return self._crl_config.enable_crl_cache
+
+This controls whether CRLs are cached at all. 
+If this is false, every certificate validation may re-download the CRL
+which will lead to slower and more network usafe however you 
+techanically ensure that every CRL is fresh
+
+If true:
+    - You only have to download it once and then reuse the same CRL
+    until crl_cache_validity_hours expires
+* This is in-mempory caching control. 
+
+"""
+
+#     def enable_crl_file_cache(self) -> bool | None:
+"""
+@property
+def enable_crl_file_cache(self) -> bool | None:
+    "Whether file-based CRL cache is enabled."
+    if not self._crl_config:
+        return self._enable_crl_file_cache
+    return self._crl_config.enable_crl_file_cache
+
+What it controls: Whether CRLs are cached to disk. 
+
+| Layer        | Purpose                         |
+| ------------ | ------------------------------- |
+| Memory cache | Per-process reuse               |
+| File cache   | Persist across process restarts |
+
+This is done so that the CRLs are written to disk which would
+allow future sessions to reuse them and avoid repeated downloads 
+across runs 
+
+* If this is disabled, you only cache in memory so when the program
+exists, you can't reuse crl
+"""
+
+#     def crl_cache_dir(self) -> str | None:
+"""
+@property
+def crl_cache_dir(self) -> str | None:
+    "Directory for CRL file cache."
+    if not self._crl_config:
+        return self._crl_cache_dir
+
+    if not self._crl_config.crl_cache_dir:
+        return None
+
+    return str(self._crl_config.crl_cache_dir)
+
+It controls where CRLs are stored if file caching is enabled 
+Example:
+    crl_cache_dir = "~/.snowflake/crl_cache"
+
+If None:
+    either file cache is disabled or use the default located that is used 
+    internally
+
+    1. CRL downloaded
+    2. Stored in memory
+    3. Written to /tmp/crl
+    4. Reused until expiration
+    5. Available across restarts 
+    
+"""
+
+#     def crl_cache_removal_delay_days(self) -> int | None:
+"""
+@property
+def crl_cache_removal_delay_days(self) -> int | None:
+    "Days to keep expired CRL files before removal."
+    if not self._crl_config:
+        return self._crl_cache_removal_delay_days
+    return self._crl_config.crl_cache_removal_delay_days
+
+This returns how many days expired CRL files should remain on 
+disk before being deleted. 
+
+Even after a CRL is expired (no longer valid for certificate 
+checking), the file can remain on disk for X days before cleanup 
+removes it.
+
+This is a retention buffer. 
+"""
+#    def crl_cache_cleanup_interval_hours(self) -> int | None:
+"""
+@property
+def crl_cache_cleanup_interval_hours(self) -> int | None:
+    "CRL cache cleanup interval in hours."
+    if not self._crl_config:
+        return self._crl_cache_cleanup_interval_hours
+    return self._crl_config.crl_cache_cleanup_interval_hours
+
+Retuns how often in hours the connector should run a cleanup pass
+over the CRL cache directory.
+
+* Controls the frequency the frequency of scanning the CRL
+cache directory and removinf old expired files which is based
+on removal delay.
+
+Example:
+    if set to 12 -> cleanup runs every 12 hours. 
+"""
+
+#    def crl_cache_start_cleanup(self) -> bool | None:
+"""
+@property
+def crl_cache_start_cleanup(self) -> bool | None:
+    "Whether to start CRL cache cleanup immediately."
+    if not self._crl_config:
+        return self._crl_cache_start_cleanup
+    return self._crl_config.crl_cache_start_cleanup
+
+What is does:
+    - Returns whether cleanup should begin immediately when 
+    the connection initalizes. 
+
+Two cases:
+    - No _crl_config -> use legacy flag
+    - _crl_config exists -> use structrued config 
+
+Meaning:
+    if True:
+        - Cleanup scheduler starts immediately after connection setup
+    if False:
+        - Cleanup may wait until first interval tick.
+        - Or only run lazily when triggered.
+
+These three control the lifecycle of CRL files on disk, not 
+certificate validation itself.
+
+They define:
+    - How long expired CRLs are retained
+    - How often cleanup runs
+    - Whether cleanup starts immediately
+Same transitional design pattern as before:
+    - Legacy attribute fallback
+    - Structured _crl_config preferred
+"""
+
+"""
+Questions:
+
+1. When would you ever need to cache CRLs in disk
+
+def enable_crl_file_cache(self) -> bool | None:
+    "Whether file-based CRL cache is enabled."
+    if not self._crl_config:
+        return self._enable_crl_file_cache
+    return self._crl_config.enable_crl_file_cache
+
+
+    
+"""
