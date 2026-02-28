@@ -312,3 +312,22 @@ Then:
 Resolves to:
     SELECT * FROM MY_DB.PUBLIC.my_table;
 """
+
+# warehouse
+"""
+@property
+def warehouse(self) -> str | None:
+    return self._warehouse
+
+It controls the virtual warehouse that is used to execute queries. 
+It determines the compute resources, cost, performance, concurrency. 
+
+It is equivalent to:
+    USE WAREHOUSE my_wh;
+
+Without a warehouse:
+    - Queries cannot execute
+    - Snowflake raises error
+* This is critical for actual query execution
+"""
+
