@@ -353,3 +353,87 @@ Snowflake performs:
 and adapt to constrained envrionments. 
 * It is a concurrency control parameter. 
 """
+
+#   def unsafe_file_write(self) -> bool:
+"""
+@property
+def unsafe_file_write(self) -> bool:
+    return self._unsafe_file_write
+
+@unsafe_file_write.setter
+def unsafe_file_write(self, value: bool) -> None:
+    self._unsafe_file_write = value
+
+Thier own description:
+            unsafe_file_write: When true, files downloaded by 
+            GET will be saved with 644 permissions. Otherwise, 
+            files will be saved with safe - owner-only 
+            permissions: 600.
+* Basically, the owner gets read and write permission while 
+group and others only get read access if this is set to true
+* False (default) → files saved with 600 permissions (owner-only)
+
+Note: by defaulting to 600, they ensure that no accidental 
+data exposure to other OS users. 
+    This is especially useful where the envrionments require
+    shared file access. 
+"""
+
+#     def check_arrow_conversion_error_on_every_column(self) -> bool:
+"""
+@property
+def check_arrow_conversion_error_on_every_column(self) -> bool:
+    return self._check_arrow_conversion_error_on_every_column
+
+@check_arrow_conversion_error_on_every_column.setter
+def check_arrow_conversion_error_on_every_column(self, value: bool) -> bool:
+    self._check_arrow_conversion_error_on_every_column = value
+
+This is a controller for data conversion since Snowflake returns 
+results in Arrow format so they must be converted into python 
+objects. 
+    - This can lead to type mismacthes or conversion errors 
+NOTE: Historically, there was a bug where type errors occuring
+before the last column in a row could silently pass
+
+This flag enforces a stricter validation pass:
+    True → check every column for conversion errors
+    False → previous (buggy) behavior
+"""
+
+#    def snowflake_version(self) -> str:
+"""
+@cached_property # NOTE: cached property, although im pretty sure 
+# It will get sent to an l4 cache since unless you constantly reach
+# for it for logging, there is not need for this 
+def snowflake_version(self) -> str:
+    # The result from SELECT CURRENT_VERSION() is `<version> <internal hash>`,
+    # and we only need the first part
+    return str(
+        self.cursor().execute("SELECT CURRENT_VERSION()").fetchall()[0][0]
+    ).split(" ")[0]
+
+This runs the query SELECT CURRENT_VERSION() once, strips the ash, caches
+the semantic version and keeps it for the lifetime fo the connection. 
+
+The purpose it being that it gates features based on the server version, 
+enables forward and backward compatbility then adjusts based on that..
+Lastly: telemetry and logging
+
+@cached_property ensures:
+    - Only one network call; no repeated latency and stable value
+    for the entire session
+
+"""
+
+
+
+"""
+Questions:
+1.     @cached_property
+        def snowflake_version(self) -> str:
+What is the under the hood implementation of this? When is it 
+transported from L1->L2...->L4->MM
+        
+
+"""
