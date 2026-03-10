@@ -424,9 +424,419 @@ connect()
     └─ register connection globally
 """
 
-# `The single sentence summary
+# The single sentence summary
 """
 connect() orchestrates configuration, security validation, HTTP session
 creation, and authentication to establish a connection to Snowflake, 
 REST session and registers the connection globally
+"""
+
+# close(self, mode: bool) -> None:
+
+"""
+The closse() method is basically the shutdown procedure for the
+Snowflake connection object. It carefully tears down everything 
+associated with the connection: background threads, telemetry, 
+sessions on the server, caches and the internal state. 
+
+Walkthough:
+
+1. Function signature:
+    def close(self, retry: bool = True) -> None:
+
+    purpose:    
+        Gracefully terminate the Snowflake session and clean up
+        client resources
+
+* The retry parameter controls whether network operations (like 
+deleting the session) should retry if they fail. 
+"""
+
+# 2. Remove the atexit hook
+
+"""
+atext.unregister(self._close_at_exit)
+
+earlier in the connection lifecycle this was registered:
+
+atext.register(self._close_at_exit)
+
+meaning that if the python program exits without explciity closing
+the connection, the connector autoatically runs _close at exit()
+
+Now the close() is being called manually, the code unregisters
+that handler so it doesn't run twice. 
+
+So this prevents duplciate cleanup when the interpreter shuts down. 
+
+"""
+
+# 3. Remove the connection from the global registry
+"""
+_connections_registry.remove_connection(self)
+
+* Earlier we saw that the connection was added here when connecting.
+
+The registry tracks all active Snowflake connections.
+
+Removing it means:
+    - this connection is no longer considered active
+
+* This also helps with things like stopping global CRL cache 
+clean up threads when no connections remain. 
+
+"""
+
+# 4. Check if REST client still exists
+"""
+    if not self.rest:
+        logger.debug("Rest object has been destroyed, cannot close session")
+        return
+    
+    self.rest is the HTTP client used to communicate with Snowflake.
+
+    If it is already None or destroyed, there is nothing to close. 
+
+    So the function simply exits. 
+
+"""
+
+# 5. Cancel the heartbeat thread
+"""
+self._cancel_heartbeat()
+
+Snowflake connections may run a heartbeat thread. 
+
+The purpose of heartbear is to keep alive the session by 
+peroidically pinging the server. 
+
+Without canceling the heartbeat, the program mught hang during 
+shutdown because the thread is still running and trying to access
+resources that are being cleaned up.
+
+So this step stops the background thread
+"""
+
+# 6. Close telemetry first
+"""
+if self._telemetry_enabled:
+    self._telemetry.close(retry=retry)
+
+Telemetry collects usage data such as:  
+    - Performance metrics
+    - Feature usage
+    - Errors
+
+It sends this data back to Snowflake.
+The imporant detail is the comment: 
+    # Close telemetry first, since it needs rest to send remaining data
+
+Telemetry relies on the REST client to send its final data.
+If we closed the REST client first, telemetry would lose the ability to
+send its final data.
+
+"""
+
+# 7. Decide whether to delete the Snowflake session
+"""
+if not self._server_session_keep_alive:
+
+* This parameter determines whether the session should persist on the
+server 
+
+Two possible behaviors:
+
+Case 1 - Normal behaviour (default):
+    if self._all_async_queries_finished():
+    logger.debug(
+        "No async queries seem to be running, deleting session"
+    )
+    self.rest.delete_session(retry=retry)
+
+    This logs the client out and releases resources. 
+
+Case 2 - Async querires still running:
+    If async queiries exist:        
+       "There are X async queries still running, not deleting session"
+    
+    Why? 
+        - Because deleting the session would kill the running 
+        queries. So the connector leaves the session alive until 
+        those queries finsih. 
+
+Case 3 - sever_session_keep_alive == True
+
+else:
+    logger.info(...)
+
+If this flag is enabled, the connector never deletes the session.
+The session continues running on Snowflake even after the client 
+disconnects. The warning explains:  
+    - Queries may continue running and consume Snowflake credits
+    - Users must canvel them manually
+
+"""
+
+# 8. Close the REST client 
+"""
+self.rest.close()
+self._rest = None
+
+This shuts down the HTTP layer. 
+
+Likely effects:
+    - Close HTTP connections
+    - Release connection pool resources
+    - Stop background networking tasks
+
+Setting _rest = None ensures that the connection object cannot 
+accidentally reuse the closed REST client after this point.
+"""
+
+# 9. Clear the query context cache
+"""
+if self._query_context_cache:
+    self._query_context_cache.clear_cache()
+
+Snowflake caches query context information for permance
+This clears that cached data to free memory
+
+"""
+
+# 10. Clear stored messages 
+"""
+del self._messages[:]
+
+messages is typicaly a list of warning or status messages collected
+during the connection lifetime. 
+
+This line clears the list in-place. 
+
+Equivalent to:
+    self._messages.clear()
+
+But using slice deletion.
+    
+"""
+
+# 11 and 12: Final message message and Error handling
+"""
+logger.debug("Session is closed")
+
+-   Indicates that shutdown finished successfully.
+
+Error handling
+    except Exception as e:
+        logger.debug(
+            "Exception encountered in closing connection. ignoring...: %s", e
+        )
+
+    The connector intentionally supresses errors during shutdown.
+    Reason:
+        Failing during clean up should not crash the user's program. 
+    So errors are logged but ignored. 
+
+"""
+
+# Execution flow summary
+"""
+close()
+│
+├─ unregister atexit cleanup
+├─ remove connection from registry
+├─ cancel heartbeat thread
+├─ flush telemetry
+├─ optionally delete server session
+├─ close REST client
+├─ clear caches
+├─ clear messages
+└─ finish
+"""
+
+# Key desing ideas
+"""
+The function protects against several real-world issues:
+
+Thread leaks:   
+    - Heartbeat threads must be stopped. 
+
+Session leaks:
+    - Sessions must be deleted to avoid unused Snowflake sessions. 
+
+Credit consumption:
+    - Async queries might still be running. 
+
+Telemetry loss:
+    - Telemetry must be flushed before closing REST client.
+
+Shutdown crahes:    
+    - Errors during cleanup should not crash the program. 
+
+"""
+
+# One sentence summary
+"""
+close() safely shuts down the Snowflake connection by stopping background threads, 
+flushing telemetry, optionally deleting the server session, closing the REST client, 
+and cleaning up internal state while suppressing errors during shutdown.
+
+"""
+
+#     def is_closed(self) -> bool:
+"""
+    def is_closed(self) -> bool:
+        "Checks whether the connection has been closed."
+        return self.rest is None
+
+What it does:
+    This function acts a boolean check if the connection 
+    is closed
+
+The connector uses a simple rule:
+    connection is closed ⇔ REST client does not exist
+
+Recall from close() earlier:
+    self.rest.close()
+    self._rest = None  
+
+So after closing the REST client pointer becomes None. 
+
+| State             | `self.rest` | `is_closed()` |
+| ----------------- | ----------- | ------------- |
+| connection open   | REST object | False         |
+| connection closed | None        | True          |
+
+* The REST client is the communication channel to Snowflake. 
+If it does not exist, the connector literally connot send 
+queries. 
+
+So the connector uses that as the canonical indicator of connection
+state
+
+"""
+
+# 2. autocommit()
+"""
+def autocommit(self, mode) -> None:
+
+Purpose: Set whether every SQL statement commits automatically. 
+
+
+| Mode             | Behavior                       |
+| ---------------- | ------------------------------ |
+| autocommit=True  | each query commits immediately |
+| autocommit=False | user must call `commit()`      |
+
+Snowflake defaults to autocommit=True. 
+
+"""
+
+# 3. First check - connection must exist
+"""
+if not self.rest:
+
+Equivalent to:
+    if connection is closed
+
+at which point it will call an error:
+    Error.errorhandler_wrapper(...)
+
+This constructs a database error. 
+
+Error details passed:
+    msg: "Connection is closed"
+    errno: ER_CONNECTION_IS_CLOSED
+    sqlstate: SQLSTATE_CONNECTION_NOT_EXISTS
+
+This is part of the DB-API 2.0 error system.
+
+Meaning:
+    You attempted an operation on a closed connection.
+"""
+
+# Second check - parameter validation
+"""
+if not isinstance(mode, bool):
+    Error.errorhandler_wrapper(
+        self,
+        None,
+        ProgrammingError,
+        {
+            "msg": f"Invalid parameter: {mode}",
+            "errno": ER_INVALID_VALUE,
+        },
+    )
+
+The function only accepts a boolean:
+True
+False
+
+If you pass something like:
+"true"
+1
+None
+
+The connector throws a ProgrammingError. 
+
+Error payload:
+    msg: "Invalid parameter"
+    errno: ER_INVALID_VALUE
+
+* So this is stirct type validation
+    
+"""
+
+# Actually changing the autocommit mode
+"""
+self.cursor().execute(f"ALTER SESSION SET autocommit={mode}")
+
+Important design detail:
+    - The connector does not change a local variable 
+
+instead it sends SQL to Snowflake
+
+ALTER SESSION SET autocommit=True
+
+or
+
+ALTER SESSION SET autocommit=False
+
+So autocommit is controlled sever-side in the session configuration. 
+
+Flow:
+    create cursor
+    → execute SQL command
+    → Snowflake updates session parameter
+"""
+
+# 6. Why a cursor is created
+"""
+
+self.cursor()
+
+Because SQL must be executed through a cursor object. 
+
+Typical DB-API pattern: 
+    connection → cursor → execute SQL
+So this internally does something like:
+    cursor = SnowflakeCursor(self)
+    cursor.execute(...)
+"""
+
+# 7. Error handling
+"""
+except Error as e:
+
+If snowflake rejects the command, the connector checks: 
+
+    if e.sqlstate == SQLSTATE_FEATURE_NOT_SUPPORTED
+
+Meaning:
+    The server does not support the atuocommit feature
+    In that case, the connector does not crash but instead
+    logs a debug message:
+
+    - Autocommit feature is not enabled for this connection
+    And simply ignores the request
+
 """
