@@ -403,6 +403,7 @@ This flag enforces a stricter validation pass:
 
 #    def snowflake_version(self) -> str:
 """
+s
 @cached_property # NOTE: cached property, although im pretty sure 
 # It will get sent to an l4 cache since unless you constantly reach
 # for it for logging, there is not need for this 

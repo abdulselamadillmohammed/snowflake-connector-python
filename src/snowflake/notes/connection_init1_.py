@@ -6,8 +6,8 @@ PYTHONPATH=. python -m snowflake.connector_main
 
 """
 
-from .connector.connection import SnowflakeConnection
-from .connector.connection import DEFAULT_CONFIGURATION
+from ..connector.connection import SnowflakeConnection
+from ..connector.connection import DEFAULT_CONFIGURATION
 import pathlib
 
 
