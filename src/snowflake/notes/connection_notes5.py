@@ -395,7 +395,7 @@ Each layer adds a convenience abstractuib
 This is a different method that's purpose of to attach error-handling
 methods dynamically to the connection object. 
 
-Step 1 - itertate over errir modules. 
+Step 1 - itertate over error modules. 
 
 for m in [
     method for method in dir(errors) if callable(getattr(errors, method))
@@ -484,11 +484,6 @@ Core generator that parses and executes SQL statements one by one.
 __set_error_attributes
 
 Dynamically attaches error classes from the errors module to the connection object.
----
-
-
-
-
 
 """
 
@@ -501,4 +496,246 @@ generic streaming executor
 cursor execution
         ↓
 REST API request
+
+Each later reduces complexity for the user.
 """
+
+# Preparing the networking layer
+"""
+This section is where the connector actually prepares the networking
+layer and session configuration before authenticating with snowflake.
+
+Two important things happen here:
+    1. OCSP configuration for PrivateLink environments
+    2. Creation of the REST client that will communicate with Snowflake
+"""
+
+# 1. setup_oscp_privatelink
+
+"""
+@staticmethod
+def setup_ocsp_privatelink(app, hostname) -> None:
+
+This function configures OCSP certificate validation when using Snowflake
+PrivateLink
+
+What OCSP is:
+    - OCSP = Online Certificate Status Protocol 
+
+When a TLS certificate is used, the client must verify that the 
+certificate has not been revoked.
+
+Normally this requires contacting the certificate authority.
+Snowflake instead provides an OCSP response cache server. 
+
+1. Normalize hostname
+hostname = hostname.lower()
+    - Ensures consistent hostname formatting. 
+
+2. Acquire lock
+SnowflakeConnection.OCSP_ENV_LOCK.acquire()
+
+This lock protects access to environemnt variables
+
+Why?
+    - Because environment variables are global to the Python process, 
+    and multiple connections could modify them simultaneously. 
+The lock prevents race conditions. 
+
+3. Construct OCSP cache URL
+ocsp_cache_server = f"http://ocsp.{hostname}/ocsp_response_cache.json"
+
+Example:
+    hostname = abc123.privatelink.snowflakecomputing.com
+    http://ocsp.abc123.privatelink.snowflakecomputing.com/ocsp_response_cache.json
+
+This is where Snowflake stores cached OCSP responses. 
+
+Step 4 - set environment variable
+os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"] = ocsp_cache_server
+Use this OCSP cache server for certificate validation instead of 
+contacting public certificate authorities
+
+Step 5 - logging 
+logger.debug("OCSP Cache Server is updated: %s", ocsp_cache_server)
+    Records the new OCSP server location. 
+
+Step 6 - release lock
+SnowflakeConnection.OCSP_ENV_LOCK.release() // this unlocks 
+the environment variable modification.
+
+"""
+
+#     def __open_connection(self):
+"""
+This function intializes everything needed for the connection
+before authentication occurs. 
+
+The high-level responsibilites are: 
+    - initialize converters
+    - create REST client 
+    - configure OCSP
+    - Configure session parameters
+
+3. Creation of the converter
+    self.converter = self._converter_class(
+        use_numpy=self._numpy,
+        support_negative_year=self._support_negative_year
+    ) 
+
+This converter handles data type conversions between Snowflake and 
+Python; Example:
+| Snowflake | Python        |
+| --------- | ------------- |
+| NUMBER    | int / decimal |
+| TIMESTAMP | datetime      |
+| ARRAY     | list          |
+| VARIANT   | dict          |
+
+Options : 
+use_numpy=True
+* Means numeric columns can be returned as NumPy arrays.
+"""
+
+# 4. Create REST client 
+"""
+self._rest = SnowflakeRestful(
+
+This object is the core networking component of the connector. 
+
+It is responsible for:
+    sending SQL queries;
+    authentication;
+    handling retries;
+    handling HTTP sessions;
+    receiving results
+
+Parameters:
+    host=self.host
+    port=self.port
+    protocol=self._protocol
+
+Example:
+    https://abc123.snowflakecomputing.com:443
+
+Important parameter
+session_manager = self._session_manager
+
+Earlier in connect() we saw:
+    SessionManagerFactory.get_manager(...)
+
+This object manages:
+    HTTP connection pooling
+    session reuse
+    retry logic
+    
+So multiple Snowflake requests share the same HTTP infrasture. 
+
+Logging:
+    logger.debug("REST API object was created: %s:%s", self.host, self.port)
+Confirms the REST layer is ready. 
+
+5. Check custom OCSP cache
+if "SF_OCSP_RESPONSE_CACHE_SERVER_URL" in os.environ:
+    this is just a chekc is the user has manually set a custom 
+    OCSP cache server, the connector logs it. 
+    This allows advanced users to override default certificate 
+    validation behaviour. 
+
+6. Detect PrivateLink environment 
+if ".privatelink.snowflakecomputing." in self.host.lower():
+
+* PrivateLink is Snowflake's private AWS netowkring option. 
+
+Instead of public internet:
+    client → internet → snowflake
+traffic flows through private AWS endpoints
+
+If PrivateLink is detected, the connector runs:
+    setup_oscp_privatelink(...)
+So certificate validation happens within the private network
+
+    if "SF_OCSP_RESPONSE_CACHE_SERVER_URL" in os.environ:
+        logger.debug(
+            "Custom OCSP Cache Server URL found in environment - %s",
+            os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"],
+        )
+
+"""
+
+# Continuation: ...
+
+"""
+
+7. Remove custom OCSP is not PrivateLink
+else:
+    if "SF_OCSP_RESPONSE_CACHE_SERVER_URL" in os.environ:
+        del os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"]
+
+If not using PrivateLink, the connector removes the custom OCSP
+setting. 
+
+This ensures the driver falls back to normal certificate validation
+behaviour.
+
+---
+
+8. Initialize session parameters
+if self._session_parameters is None:
+    self._session_parameters = {}
+
+This dictionary holds Snowflake session configuration settings. 
+
+    AUTOCOMMIT
+    TIMEZONE
+    QUERY_TAG
+    CLIENT_SESSION_KEEP_ALIVE
+
+---
+
+9. Configure autocommit
+if self._autocommit is not None:
+    self._session_parameters[PARAMETER_AUTOCOMMIT] = self._autocommit
+
+if autocommit was specified in the connection settings:
+    connect(autocommit=False)
+    The connector adds it to session parameters.
+    Later during authentication these parameters are sent to Snowflake
+
+---
+
+10. Configure timezone
+if self._autocommit is not None:
+    self._session_parameters[PARAMETER_AUTOCOMMIT] = self._autocommit
+
+Example:
+    connect(timezone="America/Toronto")
+
+The connector stores the setting so Snowflake can apply it to the 
+session. 
+
+---
+
+High-level architecture of this section
+__open_connection()
+    ↓
+create data converter
+    ↓
+create REST client
+    ↓
+configure OCSP validation
+    ↓
+configure session parameters
+    ↓
+authenticate with Snowflake (happens later)
+
+Key takeaway:
+    The snowflake connector does not open a socket or authenticate 
+    immediatelt here. Instead this function prepares the networking
+    and session environment so the authentication step can run 
+    safely afterward. 
+
+"""
+
+## Stopped at line 1406 or something
+#         if self._validate_default_parameters:
