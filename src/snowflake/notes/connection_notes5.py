@@ -737,5 +737,266 @@ Key takeaway:
 
 """
 
-## Stopped at line 1406 or something
-#         if self._validate_default_parameters:
+# self._validate_default_parameters:
+
+"""
+    if self._validate_default_parameters:
+        # Snowflake will validate the requested database, schema, and warehouse
+        self._session_parameters[PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS] = (
+            True
+        )
+
+What his means:
+    - When the connection starts, the driver may request Snowflake to
+    verify that the default objects exist.
+
+Example connection:
+    database = "SALES"
+    schema = "PUBLIC"
+    warehouse = "COMPUTE_WH"
+
+* Normally snoflake does not validate these immediately. If they are wrong, 
+the error might only appear later. 
+
+If _validate_default_parameters is enabled, the connector sends a session
+paramter telling Snowflake:
+    - Check that the requested database, schema, and warehouse are 
+    valid during login
+
+Why this exists:
+    - Without this: 
+        connect() succeds 
+        first query fails
+
+    - With validation:
+        connect() fails immediately if configutation is wrong
+
+So it prevents delayed errors. 
+
+"""
+
+# 2. Client Session keep alive
+
+"""
+if self.client_session_keep_alive is not None:
+    self._session_parameters[PARAMETER_CLIENT_SESSION_KEEP_ALIVE] = (
+        self._client_session_keep_alive
+    )
+
+What it controls
+    - Snowflake normally kills idle sessions. 
+    This parameter tells snowflake:
+    Keep the session alive even if idle. 
+
+Example: 
+    Without keep-alive:
+        user connects
+        no queries for 4 hours
+        Snowflake closes session
+    With keep-alive:
+        driver periodically sends heartbeat
+        sesison stays active
+
+This is useful for:
+    - Long running services
+    - Background workers
+    - Notebooks
+    - ETL pipelines 
+
+"""
+
+# heartbeat frequency
+"""
+if self.client_session_keep_alive_heartbeat_frequency is not None:
+    self._session_parameters[
+        PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY
+    ] = self._validate_client_session_keep_alive_heartbeat_frequency()
+
+
+What this does: 
+    If keep -alive is enabled, the driver must send heartbeat requests
+
+This parameter defines: How oftne to ping Snowflake
+Example: heartbeat every 900 seconds 
+
+The _validate_...() function ensures the value is within Snowflake's
+allowed range.
+"""
+
+# 4. Prefetch Threads
+"""
+if self.client_prefetch_threads:
+    self._session_parameters[PARAMETER_CLIENT_PREFETCH_THREADS] = (
+        self._validate_client_prefetch_threads()
+    )
+
+What this controls:
+    When you run a query returning large results, the connector down-
+    loads resuls in parallel threads 
+
+Example:
+    SELECT * FROM massive_table
+Instead of downloading sequentially:
+    chunk1
+    chunk2
+    chunk3
+
+It used threads:
+    thread 1 -> chunk1
+    thread 2 -> chunk2
+    thread 3 -> chunk3 
+
+This improves performance significantly
+
+So this parameter tells Snowflake:
+    how many prefetch threads the client will use 
+"""
+
+# 5. Authentication Setup
+"""
+# Setup authenticator 
+auth = Auth(self.rest)
+
+What this does
+    Creates the authentication handler
+
+* self.rest is the Snowflake REST API client
+
+So the Auth object is responsible for:
+    - Login
+    - Token handling
+    - Refresh tokens
+    - Session validation
+
+Think of it as the authentication controller for the conenction
+
+The Auth comes from .Auth file 
+
+"""
+
+# 6. Token-Based Reconnection
+
+"""
+if self._session_token and self._master_token:
+
+    This means:
+        The driver already has tokens from a previous connection
+
+    This happens in scenarios like: 
+        - session reuse
+        - connection pooling
+        - reconnecting without full login
+"""
+
+# Injecting Tokens into the REST client
+
+"""
+    auth._rest.update_tokens(
+        self._session_token,
+        self._master_token,
+        self._master_validity_in_seconds,
+    )
+
+This tells the REST client:
+    use these existing authentication tokens
+So instead of logging in again:
+    username + password
+
+it uses:
+    session_token
+    master_token
+"""
+
+# 8. Heartbeat validation 
+"""
+heartbeat_ret = auth._rest._heartbeat()
+
+* yhis ends a heartbeat request to Snowflake to confirm the tokens 
+are still valid. 
+
+The request basically asks Snowflake:
+    Is this session still active?
+
+"""
+
+# 9. Debug logging
+"""
+logger.debug(heartbeat_ret)
+
+Logs the response from Snowflake for debugging 
+
+Example response:
+    {"sucess": true}
+
+"""
+
+# 10. Token Failure Handling
+"""
+if not heartbeat_ret or not heartbeat_ret.get("success"):
+
+This means:
+    tokens are invalid or expired
+
+Possible reasons:   
+    - session expired 
+    - master token expired
+    - user logged out
+    - token revoked
+
+"""
+
+# 11. Raising a Snowflake Programming Error
+"""
+Error.errorhandler_wrapper(
+    self,
+    None,
+    ProgrammingError,
+    {
+        "msg": "Session and master tokens invalid",
+        "errno": ER_INVALID_VALUE,
+    },
+)
+
+Instead of raising directly, Snowflake uses an error wrapper. 
+
+This allows:
+    - Custom error handlers
+    - Logging 
+    - Telemetry
+
+The error thrown is:
+    ProgrammingError: Session and master tokens invalid
+"""
+
+# 12. Sucessful Validation
+"""
+else:
+    logger.debug("Session and master token validation successful.")
+
+
+Meaning:
+    tokens are still valid
+    session reuse is safe
+"""
+
+# The big picture 
+"""
+The block handles connection session configuration and authentication
+validation
+
+The flow is:
+Set session parameters
+        ↓
+Configure client behavior
+        ↓
+Initialize authentication system
+        ↓
+If existing tokens exist
+        ↓
+Validate tokens with heartbeat
+        ↓
+If invalid → raise error
+If valid → reuse session
+
+"""
+

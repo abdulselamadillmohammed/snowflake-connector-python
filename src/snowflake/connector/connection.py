@@ -1434,6 +1434,7 @@ class SnowflakeConnection:
             )
             heartbeat_ret = auth._rest._heartbeat()
             logger.debug(heartbeat_ret)
+            
             if not heartbeat_ret or not heartbeat_ret.get("success"):
                 Error.errorhandler_wrapper(
                     self,
