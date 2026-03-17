@@ -32,6 +32,7 @@ var/
 .installed.cfg
 *.egg
 CHANEG.md
+DESCRIPTION.md
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
