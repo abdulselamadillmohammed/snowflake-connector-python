@@ -429,3 +429,288 @@ The most important conceptual point is this:
     cmd_query() is where the conenction object turns from a 
     config/auth object into an actual SQL transport cleint 
 """
+
+# Lines 1971 onwards
+"""
+This is the core authentication execution + retry engine
+
+Everything before this chose how to authenticate - this is 
+where it actually runs the login protocol and handles 
+failures intelligently.
+
+1. _reauthenticate
+def _reauthenticate(self):
+    return self._auth_class.reauthenticate(conn=self)
+
+What this is:
+    A thin wrapper that says:
+        - ask the current auth strategy to reauthenticate itself
+
+    Important detail:
+        - It does not reuse the orginal auth instance passed earlier
+        - It uses self._auth_class (the connection's stored stategy)
+
+Why this exists:
+    Some auth methods (especially OAuth / ID token) support:
+        - refresh token -> new session
+
+    Instead of:
+        full login flow again:
+            So _reauthenticate() is:
+                "smart re-login using whatever mechanism this auth class supports"
+
+2. authenticate_with_retry
+    def authenticate_with_retry(self, auth_instance) -> None:
+
+This is the outer wrapper around authentication.
+
+Step 1: Try authentication normally
+
+try: 
+    self._authenticate(auth_instance)
+So first attempt:
+    just run the login flow once. 
+
+Step 2: Handle special reauthentication case
+
+except Reauthentication as ex:
+    this is a custom exception raised when:
+        cached credentials exist but are expired.
+Example:
+    - cached OAuth token expired
+    - cached SSO ID token invalid 
+
+Step 3: Log it
+logger.debug("ID token expired. Reauthenticating...: %s", ex)
+    just visibility 
+
+Step 4: Decide how to recover:
+    if type(auth_instance) in (
+        AuthByIdToken,
+        AuthByOauthCode,
+        AuthByOauthCredentials,
+    ):
+These auth types rely on token that can expire. 
+
+Case A: Token based auth:
+    self._reauthenticate()
+
+Meaning:
+    go through full SSO / OAuth flow again
+
+Case B: Other auth types
+self._authenticate(auth_instance)
+Just retry the same authentication again. 
+
+Key idea:
+    This function is handling a very specific failure mode:
+        "credentials exist but are no longer valid"
+    and adapts behavior based on auth type
+
+"""
+
+# 3. _authenticate (the real core)
+
+"""
+
+def _authenticate(self, auth_instance: AuthByPlugin):
+
+This is where actual authentication happens.
+
+4. Prepare the auth instance 
+    auth_instance.prepare(...)
+
+This step gives the authenticator everything it needs. 
+
+Inputs:
+    - connection
+    - authenticator type
+    - account 
+    - user
+    - password
+
+What prepare() likely does:
+    Depending on auth type:
+        - builds request payload 
+        - initaializes internal state
+        - loads tokens / keys
+        - configures rety context
+
+So this is:
+    initialize authentication strategy before execution
+
+5. ID token caching flag
+
+self._consent_cache_id_token = getattr(
+    auth_instance, "consent_cache_id_token", True
+)
+
+This checks:
+    does this auth method allow caching ID tokens?
+
+If the auth class defines it, use it. Otherwise 
+default to True. 
+
+6. Create Auth controller
+
+auth = Auth(self.rest)
+
+Important distinction:
+    - auth_instance -> strategy (how to authenticate)
+    - Auth(...) -> executor (actually sends requests)
+So:
+    Auth = engine
+    AuthByX = strategy
+
+7. Start retry timing
+auth_instance._retry_ctx.set_start_time()
+
+This initializes retry tracking. 
+
+Used for:
+    - timeout enforcement
+    - backoff calculation
+    - retry limits
+
+8. Execute authentication
+
+auth.authenticate(...)
+
+This is the real login call.
+
+It sends a request to:
+    POST /session/v1/login-request
+
+Parameters passed:
+    Everything needed for login:
+        - account
+        - user
+        - database/schema/warehouse/role
+        - MFA info
+        - password / tokens
+        - session parameters
+
+Conceptual flow:
+
+AuthByX builds payload
+        ↓
+Auth.authenticate() sends HTTP request
+        ↓
+Snowflake returns:
+    session_token
+    master_token
+
+9. Handle authentication failure 
+
+except OperationalError as e:
+
+This is triggered when:
+    network failure
+    timeout
+    temporary auth issue
+
+Log it
+    logger.debug("Operational Error raised at authentication...")
+
+10. Retry loop
+
+while True:
+    This loop implements retry logic with backoff
+
+Step A: Let auth strategy adjust itself
+    auth_instance.handle_timeout(...)
+
+This is critical.
+Instead of the connection handling retries generically, it lets the 
+auth strategy decide what to do. 
+
+Examples of what this might do:
+   refresh token
+    prompt MFA again
+    regenerate request
+    adjust parameters 
+
+Step B: Rety authentication
+    auth.authenticate(...)
+
+Same call as before, but now:
+    auth_instance may have updated its state
+"""
+
+# 11. If retry fails again
+"""
+except OperationalError as auth_op:
+
+Case: fatal connectivity failure 
+
+if auth_op.errno == ER_FAILED_TO_CONNECT_TO_DB:
+
+This means:
+    Snowflake is unreachable
+
+Enhance error message:
+if _CONNECTIVITY_ERR_MSG in e.msg:
+    auth_op.msg += f"\n{_CONNECTIVITY_ERR_MSG}"
+So the user gets a clearer message 
+
+Raise error;
+    raise auth_op from e
+stops retrying. 
+
+Case: non-fata -> retry again. 
+    logger.debug("Continuing authenticator specific timeout handling")
+    continue
+
+Loop continues
+
+12. Success -> breakloop
+    break
+"""
+
+# 12. Big picture:
+"""
+this entire block is a robus authentication engine with strategy-specific 
+retry logic 
+
+Full flow:
+
+authenticate_with_retry()
+        ↓
+_try authenticate once
+        ↓
+if token expired → reauthenticate intelligently
+        ↓
+else → run _authenticate()
+        ↓
+    prepare auth strategy
+        ↓
+    send login request
+        ↓
+    if success → done
+        ↓
+    if failure:
+        ↓
+        let auth strategy handle timeout
+        ↓
+        retry
+        ↓
+        repeat until success or fatal error
+
+This system combines:
+
+1. Strategy Pattern
+AuthByX defines behavior
+
+2. Retry Engine
+_authenticate loop handles failures
+
+3. Delegated Recovery
+auth_instance.handle_timeout()
+
+This is the most important part:
+The connector does not hardcode retry logic — it 
+lets each authentication method define how to recover.
+
+This design allows:
+each auth type to control its own recovery strategy.
+"""
